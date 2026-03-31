@@ -17,12 +17,24 @@ description: 控制浏览器访问和操作网页
     - 安装 `playwright` Python 包（旧系统自动降级兼容版本）
     - 在 Linux 上安装系统依赖
     - 下载 Chromium 浏览器（Linux 服务器自动使用无头精简版）
-    - 自动检测国内网络并使用镜像加速
+    - 自动检测国内网络并使用镜像加速，镜像下载失败时自动回退官方源
   </Tab>
   <Tab title="手动安装">
     ```bash
     pip install playwright
     playwright install chromium
+    ```
+
+    手动安装时建议优先使用清华源；若下载 `playwright` wheel 时返回 `403/404`，再切回官方源：
+
+    ```bash
+    PYTHONNOUSERSITE=1 pip install playwright -i https://pypi.tuna.tsinghua.edu.cn/simple
+    python -m playwright install chromium
+    ```
+
+    ```bash
+    PYTHONNOUSERSITE=1 pip install playwright --index-url https://pypi.org/simple
+    python -m playwright install chromium
     ```
 
     Linux 服务器还需安装系统依赖：

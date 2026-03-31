@@ -9,6 +9,8 @@ import click
 PLAYWRIGHT_VERSION = "1.52.0"
 PLAYWRIGHT_LEGACY_VERSION = "1.28.0"
 GLIBC_THRESHOLD = (2, 28)
+CHINA_PYPI_MIRROR = "https://pypi.tuna.tsinghua.edu.cn/simple"
+OFFICIAL_PYPI_INDEX = "https://pypi.org/simple"
 CHINA_MIRROR = "https://registry.npmmirror.com/-/binary/playwright"
 
 
@@ -66,13 +68,39 @@ def _is_china_network() -> bool:
         return False
 
 
-def _pip_install(package_spec: str) -> int:
-    """Install a package, retrying with --user on permission failure."""
+def _pip_env():
+    env = os.environ.copy()
+    env.setdefault("PYTHONNOUSERSITE", "1")
+    return env
+
+
+def _run_pip_install(package_spec: str, *, use_official_index: bool = False, user: bool = False) -> int:
     python = sys.executable
-    ret = subprocess.call([python, "-m", "pip", "install", package_spec])
+    cmd = [python, "-m", "pip", "install"]
+    if user:
+        cmd.append("--user")
+    if use_official_index:
+        cmd.extend(["--index-url", OFFICIAL_PYPI_INDEX])
+    cmd.append(package_spec)
+    return subprocess.call(cmd, env=_pip_env())
+
+
+def _pip_install(package_spec: str) -> int:
+    """Install a package, preferring the current mirror and falling back to official PyPI."""
+    use_mirror = _is_china_network()
+    if use_mirror:
+        click.echo(f"  (using configured China PyPI mirror, fallback available: {CHINA_PYPI_MIRROR})")
+
+    ret = _run_pip_install(package_spec)
+    if ret != 0 and use_mirror:
+        click.echo(click.style("  Mirror install failed, retrying with official PyPI...", fg="yellow"))
+        ret = _run_pip_install(package_spec, use_official_index=True)
     if ret != 0:
         click.echo("  Retrying with --user flag...")
-        ret = subprocess.call([python, "-m", "pip", "install", "--user", package_spec])
+        ret = _run_pip_install(package_spec, user=True)
+    if ret != 0 and use_mirror:
+        click.echo(click.style("  User install with mirror failed, retrying with official PyPI...", fg="yellow"))
+        ret = _run_pip_install(package_spec, use_official_index=True, user=True)
     return ret
 
 

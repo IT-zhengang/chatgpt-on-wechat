@@ -24,13 +24,27 @@ cd chatgpt-on-wechat/
 pip3 install -r requirements.txt
 ```
 
+推荐在 Conda / pyenv / 系统 Python 混合环境中使用下面的方式安装。默认优先使用清华源，并通过 `PYTHONNOUSERSITE=1` 避免用户站点包干扰：
+
+```bash
+PYTHONNOUSERSITE=1 pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
 扩展依赖（可选，建议安装）：
 
 ```bash
 pip3 install -r requirements-optional.txt
 ```
 
+如需完整安装可选依赖，推荐同样优先使用清华源：
+
+```bash
+PYTHONNOUSERSITE=1 pip3 install -r requirements-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
 > 国内网络可使用镜像源加速：`pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
+>
+> 若镜像返回 `403/404` 等下载错误，可切回官方源：`pip3 install -r requirements.txt --index-url https://pypi.org/simple`
 
 ### 3. 安装 Cow CLI
 
@@ -38,6 +52,18 @@ pip3 install -r requirements-optional.txt
 
 ```bash
 pip3 install -e .
+```
+
+推荐使用下面的方式安装 Cow CLI。默认沿用清华源，并关闭 build isolation 以避免构建子进程再次因为镜像拉取失败：
+
+```bash
+PYTHONNOUSERSITE=1 pip3 install -e . --no-build-isolation -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+若清华源返回 `403/404`，可切回官方源：
+
+```bash
+PYTHONNOUSERSITE=1 pip3 install -e . --no-build-isolation --index-url https://pypi.org/simple
 ```
 
 安装后即可使用 `cow` 命令：

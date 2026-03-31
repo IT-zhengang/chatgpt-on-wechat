@@ -7,10 +7,10 @@ edge-tts # edge-tts
 elevenlabs==1.0.3 # elevenlabs TTS
 
 #install plugin
-dulwich
+dulwich==0.24.0
 
 # xunfei spark
-websocket-client==1.2.0
+websocket-client==1.7.0
 
 # google
 google-generativeai

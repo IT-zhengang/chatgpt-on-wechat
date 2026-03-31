@@ -132,13 +132,26 @@ cd chatgpt-on-wechat/
 pip3 install -r requirements.txt
 ```
 
+推荐在 Conda / pyenv / 系统 Python 混合环境中使用下面的方式安装。默认优先使用清华源，并通过 `PYTHONNOUSERSITE=1` 避免用户站点包干扰：
+
+```bash
+PYTHONNOUSERSITE=1 pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
 **(3) 拓展依赖 (可选，建议安装)：**
 
 ```bash
 pip3 install -r requirements-optional.txt
 ```
 
+如需完整安装可选依赖，推荐同样优先使用清华源：
+
+```bash
+PYTHONNOUSERSITE=1 pip3 install -r requirements-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
 > 国内网络可使用镜像源加速：`pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
+> 若镜像返回 `403/404` 等下载错误，可切回官方源：`pip3 install -r requirements.txt --index-url https://pypi.org/simple`
 
 如果某项依赖安装失败可注释掉对应的行后重试。
 
@@ -148,7 +161,32 @@ pip3 install -r requirements-optional.txt
 pip3 install -e .
 ```
 
+推荐使用下面的方式安装 Cow CLI。默认沿用清华源，并关闭 build isolation 以避免构建子进程再次因为镜像拉取失败：
+
+```bash
+PYTHONNOUSERSITE=1 pip3 install -e . --no-build-isolation -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+若清华源返回 `403/404`，可切回官方源：
+
+```bash
+PYTHONNOUSERSITE=1 pip3 install -e . --no-build-isolation --index-url https://pypi.org/simple
+```
+
 安装后可使用 `cow` 命令管理服务（启动、停止、更新等）和技能，详见 [命令文档](https://docs.cowagent.ai/commands/index)。
+
+可先执行以下命令确认 CLI 安装成功：
+
+```bash
+PYTHONNOUSERSITE=1 cow help
+```
+
+**安装排障：**
+
+- 若出现 `HTTP error 403`，通常是 `pip` 默认镜像源返回拒绝，可在命令后追加 `--index-url https://pypi.org/simple`
+- 若 `pip install -e .` 报 `Failed to build ... when installing build dependencies`，请改用 `--no-build-isolation`
+- 若 `pip check` 报 `typer`、`click` 等与本项目无关的冲突，通常是 `~/.local/lib/.../site-packages` 被混入当前环境；可在命令前添加 `PYTHONNOUSERSITE=1`
+- 若只想验证项目自身依赖是否正常，可执行 `PYTHONNOUSERSITE=1 python3 -m pip check`
 
 **(5) 安装浏览器工具 (可选)：**
 
@@ -159,6 +197,18 @@ cow install-browser
 ```
 
 该命令会自动安装 `playwright` 和 Chromium 浏览器，国内网络自动使用镜像加速。详见 [浏览器工具文档](https://docs.cowagent.ai/tools/browser)。
+
+若安装 `playwright` Python 包时遇到清华源 `403/404`，`cow install-browser` 新版本会自动回退到官方 PyPI；手动执行时建议先用清华源，失败再切官方源：
+
+```bash
+PYTHONNOUSERSITE=1 pip3 install playwright -i https://pypi.tuna.tsinghua.edu.cn/simple
+python3 -m playwright install chromium
+```
+
+```bash
+PYTHONNOUSERSITE=1 pip3 install playwright --index-url https://pypi.org/simple
+python3 -m playwright install chromium
+```
 
 ## 二、配置
 

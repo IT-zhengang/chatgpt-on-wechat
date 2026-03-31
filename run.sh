@@ -30,6 +30,8 @@ fi
 
 # Get current script directory
 export BASE_DIR=$(cd "$(dirname "$0")"; pwd)
+# Avoid leaking user-site packages into the selected Python environment.
+export PYTHONNOUSERSITE=1
 
 # Detect if in project directory
 IS_PROJECT_DIR=false
@@ -64,6 +66,32 @@ check_and_install_tool() {
         echo -e "${GREEN}✅ $tool_name is already installed.${NC}"
         return 0
     fi
+}
+
+# Run pip with mirror first, then fall back to official PyPI on mirror download errors
+pip_install_with_fallback() {
+    local log_file=$1
+    shift
+    local pip_args=("$@")
+
+    set +e
+    $PYTHON_CMD -m pip "${pip_args[@]}" $PIP_EXTRA_ARGS $PIP_MIRROR > "$log_file" 2>&1
+    local exit_code=$?
+    set -e
+
+    if [ $exit_code -ne 0 ] && [ -n "$PIP_MIRROR" ] && grep -qE "HTTP error 403|403 Client Error|too many 5.. error responses|ReadTimeoutError|ConnectTimeoutError" "$log_file"; then
+        echo -e "${YELLOW}⚠️  Mirror download failed, retrying with official PyPI...${NC}"
+        {
+            echo ""
+            echo "[mirror fallback] retry with https://pypi.org/simple"
+        } >> "$log_file"
+        set +e
+        $PYTHON_CMD -m pip "${pip_args[@]}" $PIP_EXTRA_ARGS --index-url https://pypi.org/simple >> "$log_file" 2>&1
+        exit_code=$?
+        set -e
+    fi
+
+    return $exit_code
 }
 
 # Detect and set Python command
@@ -201,6 +229,7 @@ install_dependencies() {
     local PIP_MIRROR=""
     if curl -s --connect-timeout 5 https://pypi.tuna.tsinghua.edu.cn/simple/ > /dev/null 2>&1; then
         PIP_MIRROR="-i https://pypi.tuna.tsinghua.edu.cn/simple"
+        echo -e "${YELLOW}Detected Tsinghua mirror, will use it first and fall back to official PyPI on download errors.${NC}"
     fi
 
     PIP_EXTRA_ARGS=""
@@ -211,14 +240,14 @@ install_dependencies() {
 
     echo -e "${YELLOW}Upgrading pip and basic tools...${NC}"
     set +e
-    $PYTHON_CMD -m pip install --upgrade pip setuptools wheel importlib_metadata --ignore-installed $PIP_EXTRA_ARGS $PIP_MIRROR > /tmp/pip_upgrade.log 2>&1
+    pip_install_with_fallback /tmp/pip_upgrade.log install --upgrade pip setuptools wheel importlib_metadata --ignore-installed
     [ $? -ne 0 ] && echo -e "${YELLOW}⚠️  Some tools failed to upgrade, but continuing...${NC}"
     set -e
     rm -f /tmp/pip_upgrade.log
 
     echo -e "${YELLOW}Installing project dependencies...${NC}"
     set +e
-    $PYTHON_CMD -m pip install -r requirements.txt $PIP_EXTRA_ARGS $PIP_MIRROR > /tmp/pip_install.log 2>&1
+    pip_install_with_fallback /tmp/pip_install.log install -r requirements.txt
     local exit_code=$?
     set -e
     cat /tmp/pip_install.log
@@ -232,14 +261,14 @@ install_dependencies() {
             IGNORE_PACKAGES="$IGNORE_PACKAGES --ignore-installed $pkg"
         done
         set +e
-        $PYTHON_CMD -m pip install -r requirements.txt $IGNORE_PACKAGES $PIP_EXTRA_ARGS $PIP_MIRROR \
+        pip_install_with_fallback /tmp/pip_install.log install -r requirements.txt $IGNORE_PACKAGES \
             && echo -e "${GREEN}✅ Dependencies installed successfully (workaround applied).${NC}" \
             || echo -e "${YELLOW}⚠️  Some dependencies may have issues, but continuing...${NC}"
         set -e
     elif grep -q "externally-managed-environment" /tmp/pip_install.log; then
         echo -e "${YELLOW}⚠️  Detected externally-managed environment, retrying with --break-system-packages...${NC}"
         set +e
-        $PYTHON_CMD -m pip install -r requirements.txt --break-system-packages $PIP_MIRROR \
+        pip_install_with_fallback /tmp/pip_install.log install -r requirements.txt --break-system-packages \
             && echo -e "${GREEN}✅ Dependencies installed successfully (system packages override applied).${NC}" \
             || echo -e "${YELLOW}⚠️  Some dependencies may have issues, but continuing...${NC}"
         set -e
@@ -252,13 +281,14 @@ install_dependencies() {
     # Register `cow` CLI command via editable install
     echo -e "${YELLOW}Registering cow CLI...${NC}"
     set +e
-    $PYTHON_CMD -m pip install -e . $PIP_EXTRA_ARGS $PIP_MIRROR > /dev/null 2>&1
+    pip_install_with_fallback /tmp/pip_editable.log install -e . --no-build-isolation > /dev/null 2>&1
     if command -v cow &> /dev/null; then
         echo -e "${GREEN}✅ cow CLI registered.${NC}"
     else
         echo -e "${YELLOW}⚠️  cow CLI not in PATH, you can still use: $PYTHON_CMD -m cli.cli${NC}"
     fi
     set -e
+    rm -f /tmp/pip_editable.log
 }
 
 # Select model
