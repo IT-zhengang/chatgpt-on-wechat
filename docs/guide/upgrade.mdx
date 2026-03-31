@@ -29,8 +29,8 @@ cow update
 
 ```bash
 git pull
-pip3 install -r requirements.txt
-pip3 install -e .
+python3.12 -m pip install -r requirements.txt
+python3.12 -m pip install -e .
 ```
 
 更新完成后重启服务：
@@ -44,7 +44,7 @@ cow restart
 
 # 或使用 nohup 直接运行
 kill $(ps -ef | grep app.py | grep -v grep | awk '{print $2}')
-nohup python3 app.py & tail -f nohup.out
+nohup python3.12 app.py & tail -f nohup.out
 ```
 
 ## Docker 升级

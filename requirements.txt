@@ -7,6 +7,9 @@ Pillow
 web.py
 linkai>=0.0.6.0
 agentmesh-sdk>=0.1.3
+# Keep pydantic and pydantic-core aligned for agentmesh/zai-sdk startup.
+pydantic==2.12.5
+pydantic-core==2.41.5
 python-dotenv>=1.0.0
 PyYAML>=6.0
 croniter>=2.0.0
