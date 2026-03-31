@@ -113,7 +113,7 @@ irm https://cdn.link-ai.tech/code/cow/run.ps1 | iex
 
 ### 2.环境安装
 
-支持 Linux、MacOS、Windows 操作系统，可在个人计算机及服务器上运行，需安装 `Python`，Python 版本需在3.7 ~ 3.12 之间，推荐使用3.9版本。
+支持 Linux、MacOS、Windows 操作系统，可在个人计算机及服务器上运行，需安装 `Python`，Python 版本需在 3.9 ~ 3.12 之间，推荐使用 3.12 版本。
 
 > 注意：Agent 模式推荐使用源码运行，若选择 Docker 部署则无需安装 python 环境和下载源码，可直接快进到下一节。
 
@@ -129,48 +129,48 @@ cd chatgpt-on-wechat/
 **(2) 安装核心依赖 (必选)：**
 
 ```bash
-pip3 install -r requirements.txt
+python3.12 -m pip install -r requirements.txt
 ```
 
 推荐在 Conda / pyenv / 系统 Python 混合环境中使用下面的方式安装。默认优先使用清华源，并通过 `PYTHONNOUSERSITE=1` 避免用户站点包干扰：
 
 ```bash
-PYTHONNOUSERSITE=1 pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+PYTHONNOUSERSITE=1 python3.12 -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 **(3) 拓展依赖 (可选，建议安装)：**
 
 ```bash
-pip3 install -r requirements-optional.txt
+python3.12 -m pip install -r requirements-optional.txt
 ```
 
 如需完整安装可选依赖，推荐同样优先使用清华源：
 
 ```bash
-PYTHONNOUSERSITE=1 pip3 install -r requirements-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+PYTHONNOUSERSITE=1 python3.12 -m pip install -r requirements-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
-> 国内网络可使用镜像源加速：`pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
-> 若镜像返回 `403/404` 等下载错误，可切回官方源：`pip3 install -r requirements.txt --index-url https://pypi.org/simple`
+> 国内网络可使用镜像源加速：`python3.12 -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
+> 若镜像返回 `403/404` 等下载错误，可切回官方源：`python3.12 -m pip install -r requirements.txt --index-url https://pypi.org/simple`
 
 如果某项依赖安装失败可注释掉对应的行后重试。
 
 **(4) 安装 Cow CLI (推荐)：**
 
 ```bash
-pip3 install -e .
+python3.12 -m pip install -e .
 ```
 
 推荐使用下面的方式安装 Cow CLI。默认沿用清华源，并关闭 build isolation 以避免构建子进程再次因为镜像拉取失败：
 
 ```bash
-PYTHONNOUSERSITE=1 pip3 install -e . --no-build-isolation -i https://pypi.tuna.tsinghua.edu.cn/simple
+PYTHONNOUSERSITE=1 python3.12 -m pip install -e . --no-build-isolation -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 若清华源返回 `403/404`，可切回官方源：
 
 ```bash
-PYTHONNOUSERSITE=1 pip3 install -e . --no-build-isolation --index-url https://pypi.org/simple
+PYTHONNOUSERSITE=1 python3.12 -m pip install -e . --no-build-isolation --index-url https://pypi.org/simple
 ```
 
 安装后可使用 `cow` 命令管理服务（启动、停止、更新等）和技能，详见 [命令文档](https://docs.cowagent.ai/commands/index)。
@@ -186,7 +186,7 @@ PYTHONNOUSERSITE=1 cow help
 - 若出现 `HTTP error 403`，通常是 `pip` 默认镜像源返回拒绝，可在命令后追加 `--index-url https://pypi.org/simple`
 - 若 `pip install -e .` 报 `Failed to build ... when installing build dependencies`，请改用 `--no-build-isolation`
 - 若 `pip check` 报 `typer`、`click` 等与本项目无关的冲突，通常是 `~/.local/lib/.../site-packages` 被混入当前环境；可在命令前添加 `PYTHONNOUSERSITE=1`
-- 若只想验证项目自身依赖是否正常，可执行 `PYTHONNOUSERSITE=1 python3 -m pip check`
+- 若只想验证项目自身依赖是否正常，可执行 `PYTHONNOUSERSITE=1 python3.12 -m pip check`
 
 **(5) 安装浏览器工具 (可选)：**
 
@@ -201,13 +201,13 @@ cow install-browser
 若安装 `playwright` Python 包时遇到清华源 `403/404`，`cow install-browser` 新版本会自动回退到官方 PyPI；手动执行时建议先用清华源，失败再切官方源：
 
 ```bash
-PYTHONNOUSERSITE=1 pip3 install playwright -i https://pypi.tuna.tsinghua.edu.cn/simple
-python3 -m playwright install chromium
+PYTHONNOUSERSITE=1 python3.12 -m pip install playwright -i https://pypi.tuna.tsinghua.edu.cn/simple
+python3.12 -m playwright install chromium
 ```
 
 ```bash
-PYTHONNOUSERSITE=1 pip3 install playwright --index-url https://pypi.org/simple
-python3 -m playwright install chromium
+PYTHONNOUSERSITE=1 python3.12 -m pip install playwright --index-url https://pypi.org/simple
+python3.12 -m playwright install chromium
 ```
 
 ## 二、配置
@@ -286,8 +286,8 @@ python3 -m playwright install chromium
 如果是个人计算机 **本地运行**，直接在项目根目录下执行：
 
 ```bash
-cow start              # 推荐，需先安装 Cow CLI
-python3 app.py         # 或直接运行，windows 环境下该命令通常为 python app.py
+cow start                 # 推荐，需先安装 Cow CLI
+python3.12 app.py         # 或直接运行，windows 环境下该命令通常为 py -3.12 app.py
 ```
 
 运行后默认会启动 web 服务，可通过访问 `http://localhost:9899/chat` 在网页端对话。
@@ -311,7 +311,7 @@ cow update             # 拉取最新代码并重启
 也可以使用传统方式后台运行：
 
 ```bash
-nohup python3 app.py & tail -f nohup.out
+nohup python3.12 app.py & tail -f nohup.out
 ```
 
 此外，项目根目录下的 `run.sh` 脚本也支持一键管理服务，包括 `./run.sh start`、`./run.sh stop`、`./run.sh restart` 等命令，执行 `./run.sh help` 可查看全部用法。

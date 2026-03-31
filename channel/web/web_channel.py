@@ -390,10 +390,6 @@ class WebChannel(ChatChannel):
         logger.info("[WebChannel]   7. wechatcom_app    - 企微自建应用")
         logger.info("[WebChannel]   8. wechatmp         - 个人公众号")
         logger.info("[WebChannel]   9. wechatmp_service - 企业公众号")
-        logger.info("[WebChannel] ✅ Web控制台已运行")
-        logger.info(f"[WebChannel] 🌐 本地访问: http://localhost:{port}")
-        logger.info(f"[WebChannel] 🌍 服务器访问: http://YOUR_IP:{port} (请将YOUR_IP替换为服务器IP)")
-
         # 确保静态文件目录存在
         static_dir = os.path.join(os.path.dirname(__file__), 'static')
         if not os.path.exists(static_dir):
@@ -439,7 +435,18 @@ class WebChannel(ChatChannel):
         server.daemon_threads = True
         self._http_server = server
         try:
-            server.start()
+            # Bind/listen first so we only print success logs after the socket is ready.
+            server.prepare()
+            logger.info("[WebChannel] ✅ Web控制台已运行")
+            logger.info(f"[WebChannel] 🌐 本地访问: http://localhost:{port}/chat")
+            logger.info(f"[WebChannel] 🌍 服务器访问: http://YOUR_IP:{port}/chat (请将YOUR_IP替换为服务器IP)")
+            server.serve()
+        except OSError as e:
+            logger.error(f"[WebChannel] Web控制台启动失败，无法监听 0.0.0.0:{port}: {e}")
+            logger.error(
+                "[WebChannel] 请检查运行环境是否允许进程监听端口，并确认服务器防火墙/安全组已放行该端口。"
+            )
+            raise
         except (KeyboardInterrupt, SystemExit):
             server.stop()
 

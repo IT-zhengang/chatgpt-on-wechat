@@ -30,8 +30,7 @@ fi
 
 # Get current script directory
 export BASE_DIR=$(cd "$(dirname "$0")"; pwd)
-# Avoid leaking user-site packages into the selected Python environment.
-export PYTHONNOUSERSITE=1
+# Keep the runtime environment intact; only pip install commands should isolate user-site packages.
 
 # Detect if in project directory
 IS_PROJECT_DIR=false
@@ -73,20 +72,22 @@ pip_install_with_fallback() {
     local log_file=$1
     shift
     local pip_args=("$@")
+    local primary_index=("${PIP_INDEX_ARGS[@]}")
+    local fallback_index=("--index-url" "https://pypi.org/simple")
 
     set +e
-    $PYTHON_CMD -m pip "${pip_args[@]}" $PIP_EXTRA_ARGS $PIP_MIRROR > "$log_file" 2>&1
+    PYTHONNOUSERSITE=1 $PYTHON_CMD -m pip "${pip_args[@]}" $PIP_EXTRA_ARGS "${primary_index[@]}" > "$log_file" 2>&1
     local exit_code=$?
     set -e
 
-    if [ $exit_code -ne 0 ] && [ -n "$PIP_MIRROR" ] && grep -qE "HTTP error 403|403 Client Error|too many 5.. error responses|ReadTimeoutError|ConnectTimeoutError" "$log_file"; then
+    if [ $exit_code -ne 0 ] && [ "${primary_index[*]}" != "${fallback_index[*]}" ] && grep -qE "HTTP error 403|403 Client Error|too many 5.. error responses|ReadTimeoutError|ConnectTimeoutError|Name or service not known|Temporary failure in name resolution|Could not resolve host" "$log_file"; then
         echo -e "${YELLOW}⚠️  Mirror download failed, retrying with official PyPI...${NC}"
         {
             echo ""
             echo "[mirror fallback] retry with https://pypi.org/simple"
         } >> "$log_file"
         set +e
-        $PYTHON_CMD -m pip "${pip_args[@]}" $PIP_EXTRA_ARGS --index-url https://pypi.org/simple >> "$log_file" 2>&1
+        PYTHONNOUSERSITE=1 $PYTHON_CMD -m pip "${pip_args[@]}" $PIP_EXTRA_ARGS "${fallback_index[@]}" >> "$log_file" 2>&1
         exit_code=$?
         set -e
     fi
@@ -98,16 +99,17 @@ pip_install_with_fallback() {
 detect_python_command() {
     FOUND_NEWER_VERSION=""
     
-    # Try to find Python command in order of preference
-    for cmd in python3 python python3.12 python3.11 python3.10 python3.9 python3.8 python3.7; do
+    # Prefer explicit newer interpreters first to avoid accidentally picking
+    # an older `python3` shim (for example python3 -> 3.6 while python3.12 exists).
+    for cmd in python3.12 python3.11 python3.10 python3.9 python3.8 python3.7 python3 python; do
         if command -v $cmd &> /dev/null; then
             # Check Python version
             major_version=$($cmd -c 'import sys; print(sys.version_info[0])' 2>/dev/null)
             minor_version=$($cmd -c 'import sys; print(sys.version_info[1])' 2>/dev/null)
             
             if [[ "$major_version" == "3" ]]; then
-                # Check if version is in supported range (3.7 - 3.12)
-                if (( minor_version >= 7 && minor_version <= 12 )); then
+                # Check if version is in supported range (3.9 - 3.12)
+                if (( minor_version >= 9 && minor_version <= 12 )); then
                     PYTHON_CMD=$cmd
                     PYTHON_VERSION="${major_version}.${minor_version}"
                     break
@@ -122,13 +124,13 @@ detect_python_command() {
     done
     
     if [ -z "$PYTHON_CMD" ]; then
-        echo -e "${YELLOW}Tried: python3, python, python3.12, python3.11, python3.10, python3.9, python3.8, python3.7${NC}"
+        echo -e "${YELLOW}Tried: python3.12, python3.11, python3.10, python3.9, python3.8, python3.7, python3, python${NC}"
         if [ -n "$FOUND_NEWER_VERSION" ]; then
-            echo -e "${RED}❌ Found Python $FOUND_NEWER_VERSION, but this project requires Python 3.7-3.12${NC}"
+            echo -e "${RED}❌ Found Python $FOUND_NEWER_VERSION, but this project requires Python 3.9-3.12${NC}"
             echo -e "${YELLOW}Python 3.13+ has compatibility issues with some dependencies (web.py, cgi module removed)${NC}"
-            echo -e "${YELLOW}Please install Python 3.7-3.12 (recommend Python 3.12)${NC}"
+            echo -e "${YELLOW}Please install Python 3.9-3.12 (recommend Python 3.12)${NC}"
         else
-            echo -e "${RED}❌ No suitable Python found. Please install Python 3.7-3.12${NC}"
+            echo -e "${RED}❌ No suitable Python found. Please install Python 3.9-3.12${NC}"
         fi
         exit 1
     fi
@@ -140,7 +142,7 @@ detect_python_command() {
     echo -e "${GREEN}✅ Found Python: $PYTHON_CMD (version $PYTHON_VERSION)${NC}"
 }
 
-# Check Python version (>= 3.7)
+# Check Python version (>= 3.9)
 check_python_version() {
     detect_python_command
     
@@ -226,10 +228,12 @@ clone_project() {
 # Install dependencies
 install_dependencies() {
     echo -e "${GREEN}📦 Installing dependencies...${NC}"
-    local PIP_MIRROR=""
+    PIP_INDEX_ARGS=(--index-url https://pypi.org/simple)
     if curl -s --connect-timeout 5 https://pypi.tuna.tsinghua.edu.cn/simple/ > /dev/null 2>&1; then
-        PIP_MIRROR="-i https://pypi.tuna.tsinghua.edu.cn/simple"
+        PIP_INDEX_ARGS=(-i https://pypi.tuna.tsinghua.edu.cn/simple)
         echo -e "${YELLOW}Detected Tsinghua mirror, will use it first and fall back to official PyPI on download errors.${NC}"
+    else
+        echo -e "${YELLOW}Tsinghua mirror unavailable, using official PyPI explicitly.${NC}"
     fi
 
     PIP_EXTRA_ARGS=""

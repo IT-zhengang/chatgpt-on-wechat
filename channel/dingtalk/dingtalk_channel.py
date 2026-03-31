@@ -9,6 +9,7 @@ import json
 # -*- coding=utf-8 -*-
 import logging
 import os
+import re
 import time
 import requests
 
@@ -87,6 +88,11 @@ def _check(func):
 
 @singleton
 class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
+    _STREAM_PLACEHOLDER = "正在思考中..."
+    _FINAL_PLACEHOLDER = "处理中..."
+    _STREAM_SECTION_BREAK = "\n\n> 继续补充\n\n"
+    _STREAM_STATUS_FOOTER = "\n\n> 正在生成..."
+
     dingtalk_client_id = conf().get('dingtalk_client_id')
     dingtalk_client_secret = conf().get('dingtalk_client_secret')
 
@@ -726,6 +732,29 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 context["on_event"] = self._make_stream_callback(cmsg)
             self.produce(context)
 
+    def _normalize_dingtalk_markdown(self, text: str) -> str:
+        if not text:
+            return ""
+
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        normalized = normalized.replace("\t", "    ")
+        normalized = re.sub(r"[ \t]+\n", "\n", normalized)
+        normalized = re.sub(r"(?m)^\s*([-*_])(?:\s*\1){2,}\s*$", "> 继续补充", normalized)
+        normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+        normalized = re.sub(r"(?:\n\n> 继续补充)+", "\n\n> 继续补充", normalized)
+        return normalized.strip()
+
+    def _render_dingtalk_markdown(self, text: str, finished: bool = False, placeholder: str = None) -> str:
+        content = self._normalize_dingtalk_markdown(text)
+        if finished:
+            while content.endswith("> 继续补充"):
+                content = content[:-len("> 继续补充")].rstrip()
+        if not content:
+            return placeholder or (self._FINAL_PLACEHOLDER if finished else self._STREAM_PLACEHOLDER)
+        if finished:
+            return content
+        return f"{content}{self._STREAM_STATUS_FOOTER}"
+
     def _make_stream_callback(self, cmsg: DingTalkMessage):
         state_id = str(cmsg.msg_id)
         card = AIMarkdownCardInstance(self._stream_client, cmsg.incoming_message)
@@ -737,18 +766,23 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             "started": False,
             "finished": False,
             "last_push_time": 0.0,
+            "last_rendered": None,
         }
         self._reply_card_states[state_id] = state
 
         def _push_current():
-            full_content = (state["committed"] + state["current"]).strip() or "正在思考中..."
+            full_content = state["committed"] + state["current"]
+            markdown = self._render_dingtalk_markdown(full_content, finished=False)
+            if markdown == state.get("last_rendered"):
+                return
             if not state["started"]:
                 card.ai_start(
                     recipients=[cmsg.sender_staff_id] if cmsg.is_group else None,
                     support_forward=True,
                 )
                 state["started"] = True
-            card.ai_streaming(markdown=full_content, append=False)
+            card.ai_streaming(markdown=markdown, append=False)
+            state["last_rendered"] = markdown
             state["last_push_time"] = time.time()
 
         def on_event(event: dict):
@@ -765,14 +799,14 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 if delta:
                     state["current"] += delta
                     now = time.time()
-                    if now - state["last_push_time"] >= 0.25 or delta.endswith("\n"):
+                    if now - state["last_push_time"] >= 0.45 or "\n" in delta:
                         _push_current()
 
             elif event_type == "message_end":
                 tool_calls = data.get("tool_calls", [])
                 if tool_calls:
                     if state["current"].strip():
-                        state["committed"] += state["current"].strip() + "\n\n---\n\n"
+                        state["committed"] += state["current"].strip() + self._STREAM_SECTION_BREAK
                         state["current"] = ""
                         _push_current()
                 else:
@@ -787,7 +821,11 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             return False
 
         card = state["card"]
-        full_content = (state["committed"] + text).strip() or text or "处理中..."
+        full_content = self._render_dingtalk_markdown(
+            state["committed"] + text,
+            finished=True,
+            placeholder=self._FINAL_PLACEHOLDER,
+        )
         if not state["started"]:
             card.ai_start(
                 recipients=[incoming_message.sender_staff_id] if incoming_message.conversation_type == "2" else None,
@@ -958,6 +996,11 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         # 处理文本消息
         elif reply.type in (ReplyType.TEXT, ReplyType.ERROR, ReplyType.INFO):
             logger.info(f"[DingTalk] Sending text message, length={len(reply.content)}")
+            rendered_content = self._render_dingtalk_markdown(
+                reply.content,
+                finished=True,
+                placeholder=self._FINAL_PLACEHOLDER,
+            )
             if reply_mode == "stream_card":
                 if self._finalize_stream_card(incoming_message, reply.content):
                     logger.info("[DingTalk] stream card finalized")
@@ -968,7 +1011,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                     recipients=[incoming_message.sender_staff_id] if isgroup else None,
                     support_forward=True,
                 )
-                card.ai_finish(markdown=reply.content, button_list=[])
+                card.ai_finish(markdown=rendered_content, button_list=[])
             elif conf().get("dingtalk_card_enabled"):
                 logger.info("[Dingtalk] sendMsg={}, receiver={}".format(reply, receiver))
                 def reply_with_text():
@@ -1044,23 +1087,19 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
     def generate_button_markdown_content(self, context, reply):
         image_url = context.kwargs.get("image_url")
         promptEn = context.kwargs.get("promptEn")
-        reply_text = reply.content
+        reply_text = self._normalize_dingtalk_markdown(reply.content)
         button_list = []
-        markdown_content = f"""
-{reply.content}
-                                """
+        markdown_content = reply_text or self._FINAL_PLACEHOLDER
         if image_url is not None and promptEn is not None:
             button_list = [
                 {"text": "查看原图", "url": image_url, "iosUrl": image_url, "color": "blue"}
             ]
-            markdown_content = f"""
-{promptEn}
-
-!["图片"]({image_url})
-
-{reply_text}
-
-                                """
+            markdown_parts = [
+                self._normalize_dingtalk_markdown(promptEn),
+                f'!["图片"]({image_url})',
+                reply_text,
+            ]
+            markdown_content = "\n\n".join(part for part in markdown_parts if part)
         logger.debug(f"[Dingtalk] generate_button_markdown_content, button_list={button_list} , markdown_content={markdown_content}")
 
         return button_list, markdown_content

@@ -21,49 +21,49 @@ cd chatgpt-on-wechat/
 核心依赖（必选）：
 
 ```bash
-pip3 install -r requirements.txt
+python3.12 -m pip install -r requirements.txt
 ```
 
 推荐在 Conda / pyenv / 系统 Python 混合环境中使用下面的方式安装。默认优先使用清华源，并通过 `PYTHONNOUSERSITE=1` 避免用户站点包干扰：
 
 ```bash
-PYTHONNOUSERSITE=1 pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+PYTHONNOUSERSITE=1 python3.12 -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 扩展依赖（可选，建议安装）：
 
 ```bash
-pip3 install -r requirements-optional.txt
+python3.12 -m pip install -r requirements-optional.txt
 ```
 
 如需完整安装可选依赖，推荐同样优先使用清华源：
 
 ```bash
-PYTHONNOUSERSITE=1 pip3 install -r requirements-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+PYTHONNOUSERSITE=1 python3.12 -m pip install -r requirements-optional.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
-> 国内网络可使用镜像源加速：`pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
+> 国内网络可使用镜像源加速：`python3.12 -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
 >
-> 若镜像返回 `403/404` 等下载错误，可切回官方源：`pip3 install -r requirements.txt --index-url https://pypi.org/simple`
+> 若镜像返回 `403/404` 等下载错误，可切回官方源：`python3.12 -m pip install -r requirements.txt --index-url https://pypi.org/simple`
 
 ### 3. 安装 Cow CLI
 
 安装命令行工具，用于管理服务和技能：
 
 ```bash
-pip3 install -e .
+python3.12 -m pip install -e .
 ```
 
 推荐使用下面的方式安装 Cow CLI。默认沿用清华源，并关闭 build isolation 以避免构建子进程再次因为镜像拉取失败：
 
 ```bash
-PYTHONNOUSERSITE=1 pip3 install -e . --no-build-isolation -i https://pypi.tuna.tsinghua.edu.cn/simple
+PYTHONNOUSERSITE=1 python3.12 -m pip install -e . --no-build-isolation -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 若清华源返回 `403/404`，可切回官方源：
 
 ```bash
-PYTHONNOUSERSITE=1 pip3 install -e . --no-build-isolation --index-url https://pypi.org/simple
+PYTHONNOUSERSITE=1 python3.12 -m pip install -e . --no-build-isolation --index-url https://pypi.org/simple
 ```
 
 安装后即可使用 `cow` 命令：
@@ -73,7 +73,7 @@ cow help
 ```
 
 <Note>
-  此步骤为推荐操作。安装后可以使用 `cow start`、`cow stop`、`cow update` 等命令管理服务，也可以使用 `cow skill` 管理技能。如果不安装 CLI，可以使用 `./run.sh` 或 `python3 app.py` 运行。
+  此步骤为推荐操作。安装后可以使用 `cow start`、`cow stop`、`cow update` 等命令管理服务，也可以使用 `cow skill` 管理技能。如果不安装 CLI，可以使用 `./run.sh` 或 `python3.12 app.py` 运行。
 </Note>
 
 ### 3.1 安装浏览器工具（可选）
@@ -111,7 +111,7 @@ cow start
 **或者本地前台运行：**
 
 ```bash
-python3 app.py
+python3.12 app.py
 ```
 
 运行后默认启动 Web 控制台，访问 `http://localhost:9899` 开始对话和管理Agent。
@@ -119,7 +119,7 @@ python3 app.py
 **服务器后台运行（不使用 CLI 时）：**
 
 ```bash
-nohup python3 app.py & tail -f nohup.out
+nohup python3.12 app.py & tail -f nohup.out
 ```
 
 <Tip>
