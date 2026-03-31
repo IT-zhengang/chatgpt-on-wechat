@@ -37,6 +37,9 @@
   - `"websocket"`: 长连接模式(默认)
   - `"webhook"`: HTTP服务器模式
 - `feishu_port`: webhook模式下的HTTP服务端口(默认9891)
+- `feishu_reply_mode`: 回复模式，可选值:
+  - `"stream_card"`: 默认，使用流式卡片 Markdown 回复
+  - `"normal"`: 使用普通文本/图片/文件消息回复
 
 ## 模式一: Webhook模式(推荐生产环境)
 
@@ -84,7 +87,8 @@ pip install lark-oapi
 
 ```json
 {
-  "feishu_event_mode": "websocket"
+  "feishu_event_mode": "websocket",
+  "feishu_reply_mode": "stream_card"
 }
 ```
 
@@ -110,6 +114,7 @@ python3 app.py
 - 需要能访问公网(建立WebSocket连接)
 - 每个应用最多50个连接
 - 集群模式下消息随机分发到一个客户端
+- `stream_card` 模式下，Agent 文本会实时更新到同一张飞书卡片中；如果切到 `normal`，则回退为普通消息发送
 
 ## 平滑迁移
 
@@ -139,6 +144,22 @@ python3 app.py
 ```
 
 **解决**: 安装依赖 `pip install lark-oapi`
+
+### SOCKS代理连接失败
+
+```
+[Lark] [ERROR] connect failed, err: connecting through a SOCKS proxy requires python-socks
+```
+
+**原因**: 进程环境里配置了 `HTTP_PROXY`、`HTTPS_PROXY` 或 `ALL_PROXY`，且代理地址是 `socks5://...` 这类 SOCKS 代理，但当前 Python 环境没有安装 `python-socks`。
+
+**解决**:
+
+```bash
+pip install python-socks
+```
+
+如果飞书长连接不需要走代理，也可以移除相关代理环境变量后重启服务。
 
 ### SSL证书验证失败
 

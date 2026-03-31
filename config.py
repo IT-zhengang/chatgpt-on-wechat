@@ -131,6 +131,7 @@ available_setting = {
     "wechatmp_app_id": "",  # 微信公众平台的appID
     "wechatmp_app_secret": "",  # 微信公众平台的appsecret
     "wechatmp_aes_key": "",  # 微信公众平台的EncodingAESKey，加密模式需要
+    "feishu_reply_mode": "stream_card",  # 飞书回复模式，可选 stream_card(默认，流式卡片markdown) 或 normal(普通消息)
     # wechatcom的通用配置
     "wechatcom_corp_id": "",  # 企业微信公司的corpID
     # wechatcomapp的配置

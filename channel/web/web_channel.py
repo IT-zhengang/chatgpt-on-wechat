@@ -766,6 +766,7 @@ class ChannelsHandler:
                 {"key": "feishu_app_secret", "label": "App Secret", "type": "secret"},
                 {"key": "feishu_token", "label": "Verification Token", "type": "secret"},
                 {"key": "feishu_bot_name", "label": "Bot Name", "type": "text"},
+                {"key": "feishu_reply_mode", "label": "Reply Mode", "type": "text", "default": "stream_card"},
             ],
         }),
         ("dingtalk", {
@@ -988,6 +989,8 @@ class ChannelsHandler:
         if channel_name == "feishu":
             updates.setdefault("feishu_event_mode", "websocket")
             valid_keys.add("feishu_event_mode")
+            updates.setdefault("feishu_reply_mode", "stream_card")
+            valid_keys.add("feishu_reply_mode")
 
         local_config = conf()
         applied = {}

@@ -23,6 +23,7 @@ dashscope
 
 # feishu websocket mode
 lark-oapi
+python-socks>=2.4.4
 # dingtalk
 dingtalk_stream
 # wecom bot websocket mode

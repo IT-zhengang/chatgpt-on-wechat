@@ -17,6 +17,7 @@ import logging
 import os
 import ssl
 import threading
+import time
 # -*- coding=utf-8 -*-
 import uuid
 
@@ -55,6 +56,29 @@ def _ensure_lark_imported():
     return lark
 
 
+def _get_proxy_settings():
+    proxy_keys = ("https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY", "all_proxy", "ALL_PROXY")
+    return {key: os.environ.get(key, "") for key in proxy_keys if os.environ.get(key)}
+
+
+def _has_socks_proxy(proxy_settings):
+    return any(value.lower().startswith("socks") for value in proxy_settings.values())
+
+
+def _ensure_socks_dependency():
+    proxy_settings = _get_proxy_settings()
+    if not _has_socks_proxy(proxy_settings):
+        return
+    if importlib.util.find_spec("python_socks") is not None:
+        return
+
+    proxy_desc = ", ".join(f"{key}={value}" for key, value in proxy_settings.items())
+    raise RuntimeError(
+        "Detected SOCKS proxy for Feishu websocket but missing dependency `python-socks`. "
+        f"Current proxy env: {proxy_desc}. Install with: pip install python-socks"
+    )
+
+
 @singleton
 class FeiShuChanel(ChatChannel):
     feishu_app_id = conf().get('feishu_app_id')
@@ -70,6 +94,8 @@ class FeiShuChanel(ChatChannel):
         self._ws_client = None
         self._ws_thread = None
         self._bot_open_id = None  # cached bot open_id for @-mention matching
+        self._stream_states = {}
+        self._stream_lock = threading.Lock()
         logger.debug("[FeiShu] app_id={}, app_secret={}, verification_token={}, event_mode={}".format(
             self.feishu_app_id, self.feishu_app_secret, self.feishu_token, self.feishu_event_mode))
         # 无需群校验和前缀
@@ -161,6 +187,7 @@ class FeiShuChanel(ChatChannel):
 
     def _startup_websocket(self):
         """启动长连接接收事件(websocket模式)"""
+        _ensure_socks_dependency()
         _ensure_lark_imported()
         logger.debug("[FeiShu] Starting in websocket mode...")
 
@@ -384,8 +411,174 @@ class FeiShuChanel(ChatChannel):
             no_need_at=True
         )
         if context:
+            if conf().get("feishu_reply_mode", "stream_card") == "stream_card":
+                context["on_event"] = self._make_stream_callback(context)
             self.produce(context)
         logger.debug(f"[FeiShu] query={feishu_msg.content}, type={feishu_msg.ctype}")
+
+    def _make_stream_callback(self, context: Context):
+        state_id = uuid.uuid4().hex
+        msg = context.get("msg")
+        access_token = msg.access_token if msg else self.fetch_access_token()
+        state = {
+            "id": state_id,
+            "access_token": access_token,
+            "msg_id": getattr(msg, "msg_id", None),
+            "receive_id": context.get("receiver"),
+            "receive_id_type": context.get("receive_id_type") or "open_id",
+            "card_message_id": None,
+            "committed": "",
+            "current": "",
+            "last_rendered": "",
+            "last_push_time": 0.0,
+            "finished": False,
+        }
+        with self._stream_lock:
+            self._stream_states[state_id] = state
+        context["feishu_stream_state_id"] = state_id
+
+        def on_event(event: dict):
+            event_type = event.get("type")
+            data = event.get("data", {})
+            with self._stream_lock:
+                current_state = self._stream_states.get(state_id)
+            if not current_state or current_state.get("finished"):
+                return
+
+            if event_type == "turn_start":
+                current_state["current"] = ""
+
+            elif event_type == "message_update":
+                delta = data.get("delta", "")
+                if delta:
+                    current_state["current"] += delta
+                    now = time.time()
+                    if now - current_state["last_push_time"] >= 0.25 or delta.endswith("\n"):
+                        self._push_stream_card(current_state)
+
+            elif event_type == "message_end":
+                tool_calls = data.get("tool_calls", [])
+                if tool_calls:
+                    if current_state["current"].strip():
+                        current_state["committed"] += current_state["current"].strip() + "\n\n---\n\n"
+                        current_state["current"] = ""
+                        self._push_stream_card(current_state)
+                else:
+                    self._push_stream_card(current_state)
+
+        return on_event
+
+    def _build_interactive_card(self, markdown_text: str, finished: bool = False):
+        title = "CowAgent"
+        if not finished:
+            title = "CowAgent 正在回复"
+        return {
+            "config": {
+                "wide_screen_mode": True,
+                "enable_forward": True,
+            },
+            "header": {
+                "template": "blue",
+                "title": {
+                    "tag": "plain_text",
+                    "content": title,
+                },
+            },
+            "elements": [
+                {
+                    "tag": "markdown",
+                    "content": markdown_text or "正在思考中...",
+                }
+            ],
+        }
+
+    def _render_stream_markdown(self, state: dict, final_text: str = None):
+        content = state.get("committed", "")
+        if final_text is not None:
+            content += final_text
+        else:
+            content += state.get("current", "")
+        content = (content or "").strip()
+        return content or "正在思考中..."
+
+    def _send_feishu_message(self, headers: dict, msg_type: str, content_json: str, context: Context = None, reply_to_msg_id: str = None):
+        if reply_to_msg_id:
+            url = f"https://open.feishu.cn/open-apis/im/v1/messages/{reply_to_msg_id}/reply"
+            data = {"msg_type": msg_type, "content": content_json}
+            res = requests.post(url=url, headers=headers, json=data, timeout=(5, 20))
+        else:
+            url = "https://open.feishu.cn/open-apis/im/v1/messages"
+            params = {"receive_id_type": (context.get("receive_id_type") if context else None) or "open_id"}
+            data = {
+                "receive_id": context.get("receiver") if context else None,
+                "msg_type": msg_type,
+                "content": content_json
+            }
+            res = requests.post(url=url, headers=headers, params=params, json=data, timeout=(5, 20))
+        return res.json()
+
+    def _update_feishu_message(self, message_id: str, headers: dict, msg_type: str, content_json: str):
+        url = f"https://open.feishu.cn/open-apis/im/v1/messages/{message_id}"
+        data = {"msg_type": msg_type, "content": content_json}
+        res = requests.patch(url=url, headers=headers, json=data, timeout=(5, 20))
+        return res.json()
+
+    def _push_stream_card(self, state: dict, final_text: str = None, finished: bool = False):
+        markdown_text = self._render_stream_markdown(state, final_text=final_text)
+        if not finished and markdown_text == state.get("last_rendered"):
+            return True
+
+        headers = {
+            "Authorization": "Bearer " + state["access_token"],
+            "Content-Type": "application/json",
+        }
+        card = self._build_interactive_card(markdown_text, finished=finished)
+        content_json = json.dumps(card, ensure_ascii=False)
+
+        if state.get("card_message_id"):
+            res = self._update_feishu_message(state["card_message_id"], headers, "interactive", content_json)
+            if res.get("code") != 0:
+                logger.error(f"[FeiShu] update card failed, code={res.get('code')}, msg={res.get('msg')}")
+                return False
+        else:
+            res = self._send_feishu_message(
+                headers=headers,
+                msg_type="interactive",
+                content_json=content_json,
+                context=None,
+                reply_to_msg_id=state.get("msg_id"),
+            )
+            if res.get("code") != 0:
+                logger.error(f"[FeiShu] send card failed, code={res.get('code')}, msg={res.get('msg')}")
+                return False
+            state["card_message_id"] = res.get("data", {}).get("message_id")
+
+        state["last_rendered"] = markdown_text
+        state["last_push_time"] = time.time()
+        if finished:
+            state["finished"] = True
+        return True
+
+    def _finalize_stream_card(self, reply: Reply, context: Context):
+        state_id = context.get("feishu_stream_state_id")
+        if not state_id:
+            return False
+        with self._stream_lock:
+            state = self._stream_states.get(state_id)
+        if not state:
+            return False
+
+        success = self._push_stream_card(state, final_text=reply.content, finished=True)
+        with self._stream_lock:
+            self._stream_states.pop(state_id, None)
+        return success
+
+    def _clear_stream_state(self, context: Context):
+        state_id = context.get("feishu_stream_state_id")
+        if not state_id:
+            return
+        with self._stream_lock:
+            self._stream_states.pop(state_id, None)
 
     def send(self, reply: Reply, context: Context):
         msg = context.get("msg")
@@ -402,6 +595,19 @@ class FeiShuChanel(ChatChannel):
         logger.debug(f"[FeiShu] sending reply, type={context.type}, content={reply.content[:100]}...")
         reply_content = reply.content
         content_key = "text"
+        feishu_reply_mode = conf().get("feishu_reply_mode", "stream_card")
+
+        if reply.type == ReplyType.TEXT and feishu_reply_mode == "stream_card":
+            if self._finalize_stream_card(reply, context):
+                logger.info("[FeiShu] stream card finalized")
+                return
+            card = self._build_interactive_card(reply.content, finished=True)
+            msg_type = "interactive"
+            reply_content = card
+            content_key = None
+        elif context.get("feishu_stream_state_id"):
+            self._clear_stream_state(context)
+
         if reply.type == ReplyType.IMAGE_URL:
             # 图片上传
             reply_content = self._upload_image_url(reply.content, access_token)
@@ -450,32 +656,20 @@ class FeiShuChanel(ChatChannel):
                 msg_type = "file"
                 content_key = "file_key"
 
-        # Check if we can reply to an existing message (need msg_id)
-        can_reply = is_group and msg and hasattr(msg, 'msg_id') and msg.msg_id
+        # Reply to the original incoming message when possible, for both p2p and group chats.
+        can_reply = msg and hasattr(msg, 'msg_id') and msg.msg_id
 
         # Build content JSON
         content_json = json.dumps(reply_content, ensure_ascii=False) if content_key is None else json.dumps({content_key: reply_content}, ensure_ascii=False)
         logger.debug(f"[FeiShu] Sending message: msg_type={msg_type}, content={content_json[:200]}")
 
-        if can_reply:
-            # 群聊中回复已有消息
-            url = f"https://open.feishu.cn/open-apis/im/v1/messages/{msg.msg_id}/reply"
-            data = {
-                "msg_type": msg_type,
-                "content": content_json
-            }
-            res = requests.post(url=url, headers=headers, json=data, timeout=(5, 10))
-        else:
-            # 发送新消息（私聊或群聊中无msg_id的情况，如定时任务）
-            url = "https://open.feishu.cn/open-apis/im/v1/messages"
-            params = {"receive_id_type": context.get("receive_id_type") or "open_id"}
-            data = {
-                "receive_id": context.get("receiver"),
-                "msg_type": msg_type,
-                "content": content_json
-            }
-            res = requests.post(url=url, headers=headers, params=params, json=data, timeout=(5, 10))
-        res = res.json()
+        res = self._send_feishu_message(
+            headers=headers,
+            msg_type=msg_type,
+            content_json=content_json,
+            context=None if can_reply else context,
+            reply_to_msg_id=msg.msg_id if can_reply else None,
+        )
         if res.get("code") == 0:
             logger.info(f"[FeiShu] send message success")
         else:
