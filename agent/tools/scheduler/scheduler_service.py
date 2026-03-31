@@ -114,31 +114,13 @@ class SchedulerService:
         
         try:
             next_run = datetime.fromisoformat(next_run_str)
-            
-            # Check if task is overdue (e.g., service restart)
+
+            # If the service was down or scheduler started late, run missed tasks once
+            # immediately instead of silently skipping them.
             if next_run < now:
                 time_diff = (now - next_run).total_seconds()
-                
-                # If overdue by more than 5 minutes, skip this run and schedule next
-                if time_diff > 300:  # 5 minutes
-                    logger.warning(f"[Scheduler] Task {task['id']} is overdue by {int(time_diff)}s, skipping and scheduling next run")
-                    
-                    # For one-time tasks, remove them directly
-                    schedule = task.get("schedule", {})
-                    if schedule.get("type") == "once":
-                        self.task_store.delete_task(task['id'])
-                        logger.info(f"[Scheduler] One-time task {task['id']} expired, removed")
-                        return False
-                    
-                    # For recurring tasks, calculate next run from now
-                    next_next_run = self._calculate_next_run(task, now)
-                    if next_next_run:
-                        self.task_store.update_task(task['id'], {
-                            "next_run_at": next_next_run.isoformat()
-                        })
-                        logger.info(f"[Scheduler] Rescheduled task {task['id']} to {next_next_run}")
-                    return False
-            
+                logger.warning(f"[Scheduler] Task {task['id']} is overdue by {int(time_diff)}s, executing now")
+
             return now >= next_run
         except Exception:
             return False

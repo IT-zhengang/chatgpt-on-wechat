@@ -35,9 +35,15 @@ description: 将 CowAgent 接入钉钉应用
 {
   "channel_type": "dingtalk",
   "dingtalk_client_id": "YOUR_CLIENT_ID",
-  "dingtalk_client_secret": "YOUR_CLIENT_SECRET"
+  "dingtalk_client_secret": "YOUR_CLIENT_SECRET",
+  "dingtalk_reply_mode": "stream_card"
 }
 ```
+
+`dingtalk_reply_mode` 可选：
+
+- `stream_card`: 默认，使用流式 AI Markdown 卡片回复
+- `normal`: 使用普通文本/图片/文件消息回复
 
 3. 安装依赖：
 

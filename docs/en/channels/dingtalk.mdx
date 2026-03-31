@@ -35,9 +35,15 @@ Integrate CowAgent into DingTalk by creating an intelligent robot app on the Din
 {
   "channel_type": "dingtalk",
   "dingtalk_client_id": "YOUR_CLIENT_ID",
-  "dingtalk_client_secret": "YOUR_CLIENT_SECRET"
+  "dingtalk_client_secret": "YOUR_CLIENT_SECRET",
+  "dingtalk_reply_mode": "stream_card"
 }
 ```
+
+`dingtalk_reply_mode` supports:
+
+- `stream_card`: default, replies with streaming AI Markdown cards
+- `normal`: replies with regular text/image/file messages
 
 3. Install the dependency:
 

@@ -25,6 +25,7 @@
   "feishu_reply_mode": "stream_card",
   "dingtalk_client_id": "",
   "dingtalk_client_secret":"",
+  "dingtalk_reply_mode": "stream_card",
   "wecom_bot_id": "",
   "wecom_bot_secret": "",
   "agent": true,

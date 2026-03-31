@@ -776,6 +776,7 @@ class ChannelsHandler:
             "fields": [
                 {"key": "dingtalk_client_id", "label": "Client ID", "type": "text"},
                 {"key": "dingtalk_client_secret", "label": "Client Secret", "type": "secret"},
+                {"key": "dingtalk_reply_mode", "label": "Reply Mode", "type": "text", "default": "stream_card"},
             ],
         }),
         ("wecom_bot", {
@@ -991,6 +992,9 @@ class ChannelsHandler:
             valid_keys.add("feishu_event_mode")
             updates.setdefault("feishu_reply_mode", "stream_card")
             valid_keys.add("feishu_reply_mode")
+        if channel_name == "dingtalk":
+            updates.setdefault("dingtalk_reply_mode", "stream_card")
+            valid_keys.add("dingtalk_reply_mode")
 
         local_config = conf()
         applied = {}

@@ -150,6 +150,7 @@ available_setting = {
     # 钉钉配置
     "dingtalk_client_id": "",  # 钉钉机器人Client ID 
     "dingtalk_client_secret": "",  # 钉钉机器人Client Secret
+    "dingtalk_reply_mode": "stream_card",  # 钉钉回复模式，可选 stream_card(默认，流式卡片markdown) 或 normal(普通消息)
     "dingtalk_card_enabled": False,
     # 企微智能机器人配置(长连接模式)
     "wecom_bot_id": "",  # 企微智能机器人BotID

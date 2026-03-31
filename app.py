@@ -5,6 +5,7 @@ import signal
 import sys
 import time
 
+from bridge.bridge import Bridge
 from channel import channel_factory
 from common import const
 from common.log import logger
@@ -14,6 +15,26 @@ import threading
 
 
 _channel_mgr = None
+
+
+def _init_scheduler_on_startup():
+    """
+    Start the background scheduler proactively.
+
+    Previously the scheduler service was only initialized lazily when the first
+    Agent session was created. After a process restart this meant persisted
+    tasks existed in tasks.json but would never execute until someone talked to
+    the bot again and triggered Agent initialization.
+    """
+    try:
+        agent_bridge = Bridge().get_agent_bridge()
+        from agent.tools.scheduler.integration import init_scheduler
+
+        if not agent_bridge.scheduler_initialized and init_scheduler(agent_bridge):
+            agent_bridge.scheduler_initialized = True
+            logger.info("[App] Scheduler service initialized on startup")
+    except Exception as e:
+        logger.warning(f"[App] Failed to initialize scheduler on startup: {e}")
 
 
 def get_channel_manager():
@@ -302,6 +323,7 @@ def run():
         logger.info(f"[App] Starting channels: {channel_names}")
 
         _channel_mgr = ChannelManager()
+        _init_scheduler_on_startup()
         _channel_mgr.start(channel_names, first_start=True)
 
         while True:
