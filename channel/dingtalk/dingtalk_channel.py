@@ -91,7 +91,6 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
     _STREAM_PLACEHOLDER = "正在思考中..."
     _FINAL_PLACEHOLDER = "处理中..."
     _STREAM_SECTION_BREAK = "\n\n> 继续补充\n\n"
-    _STREAM_STATUS_FOOTER = "\n\n> 正在生成..."
 
     dingtalk_client_id = conf().get('dingtalk_client_id')
     dingtalk_client_secret = conf().get('dingtalk_client_secret')
@@ -771,9 +770,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 content = content[:-len("> 继续补充")].rstrip()
         if not content:
             return placeholder or (self._FINAL_PLACEHOLDER if finished else self._STREAM_PLACEHOLDER)
-        if finished:
-            return content
-        return f"{content}{self._STREAM_STATUS_FOOTER}"
+        return content
 
     def _make_stream_callback(self, cmsg: DingTalkMessage):
         state_id = str(cmsg.msg_id)
