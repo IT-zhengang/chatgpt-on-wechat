@@ -9,6 +9,7 @@ import json
 # -*- coding=utf-8 -*-
 import logging
 import os
+import re
 import time
 import requests
 
@@ -116,6 +117,26 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         # Robot code cache (extracted from incoming messages)
         self._robot_code = None
         self._reply_card_states = {}
+
+    @staticmethod
+    def _format_stream_card_markdown(text: str) -> str:
+        """Normalize markdown for DingTalk's mobile AI card."""
+        text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"\n\s*---\s*\n", "\n\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
+    @staticmethod
+    def _init_ai_card(card: AIMarkdownCardInstance) -> AIMarkdownCardInstance:
+        """Hide unused template regions such as msgSlider to avoid placeholder blocks."""
+        card.set_title_and_logo("CowAgent", "")
+        card.set_order([
+            "msgTitle",
+            "msgContent",
+            "staticMsgContent",
+            "msgButtons",
+        ])
+        return card
 
     def _open_connection(self, client):
         """
@@ -728,8 +749,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
 
     def _make_stream_callback(self, cmsg: DingTalkMessage):
         state_id = str(cmsg.msg_id)
-        card = AIMarkdownCardInstance(self._stream_client, cmsg.incoming_message)
-        card.set_title_and_logo("CowAgent", "")
+        card = self._init_ai_card(AIMarkdownCardInstance(self._stream_client, cmsg.incoming_message))
         state = {
             "card": card,
             "committed": "",
@@ -741,7 +761,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
         self._reply_card_states[state_id] = state
 
         def _push_current():
-            full_content = (state["committed"] + state["current"]).strip() or "正在思考中..."
+            full_content = self._format_stream_card_markdown(state["committed"] + state["current"]) or "正在思考中..."
             if not state["started"]:
                 card.ai_start(
                     recipients=[cmsg.sender_staff_id] if cmsg.is_group else None,
@@ -787,7 +807,7 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
             return False
 
         card = state["card"]
-        full_content = (state["committed"] + text).strip() or text or "处理中..."
+        full_content = self._format_stream_card_markdown(state["committed"] + text) or self._format_stream_card_markdown(text) or "处理中..."
         if not state["started"]:
             card.ai_start(
                 recipients=[incoming_message.sender_staff_id] if incoming_message.conversation_type == "2" else None,
@@ -962,13 +982,12 @@ class DingTalkChanel(ChatChannel, dingtalk_stream.ChatbotHandler):
                 if self._finalize_stream_card(incoming_message, reply.content):
                     logger.info("[DingTalk] stream card finalized")
                     return
-                card = AIMarkdownCardInstance(self._stream_client, incoming_message)
-                card.set_title_and_logo("CowAgent", "")
+                card = self._init_ai_card(AIMarkdownCardInstance(self._stream_client, incoming_message))
                 card.ai_start(
                     recipients=[incoming_message.sender_staff_id] if isgroup else None,
                     support_forward=True,
                 )
-                card.ai_finish(markdown=reply.content, button_list=[])
+                card.ai_finish(markdown=self._format_stream_card_markdown(reply.content), button_list=[])
             elif conf().get("dingtalk_card_enabled"):
                 logger.info("[Dingtalk] sendMsg={}, receiver={}".format(reply, receiver))
                 def reply_with_text():

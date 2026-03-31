@@ -15,6 +15,7 @@ import importlib.util
 import json
 import logging
 import os
+import re
 import ssl
 import threading
 import time
@@ -117,6 +118,14 @@ class FeiShuChanel(ChatChannel):
             self._startup_websocket()
         else:
             self._startup_webhook()
+
+    @staticmethod
+    def _format_stream_card_markdown(text: str) -> str:
+        """Normalize markdown so Feishu cards stay compact and clean."""
+        text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"\n\s*---\s*\n", "\n\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
 
     def _fetch_bot_open_id(self):
         """Fetch the bot's own open_id via API so we can match @-mentions without feishu_bot_name."""
@@ -472,6 +481,7 @@ class FeiShuChanel(ChatChannel):
         title = "CowAgent"
         if not finished:
             title = "CowAgent 正在回复"
+        markdown_text = self._format_stream_card_markdown(markdown_text) or "正在思考中..."
         return {
             "config": {
                 "wide_screen_mode": True,
@@ -487,7 +497,7 @@ class FeiShuChanel(ChatChannel):
             "elements": [
                 {
                     "tag": "markdown",
-                    "content": markdown_text or "正在思考中...",
+                    "content": markdown_text,
                 }
             ],
         }
@@ -498,7 +508,7 @@ class FeiShuChanel(ChatChannel):
             content += final_text
         else:
             content += state.get("current", "")
-        content = (content or "").strip()
+        content = self._format_stream_card_markdown(content)
         return content or "正在思考中..."
 
     def _send_feishu_message(self, headers: dict, msg_type: str, content_json: str, context: Context = None, reply_to_msg_id: str = None):
